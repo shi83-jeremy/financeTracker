@@ -6,13 +6,12 @@ A small basic finance tracker built with a domain model (Accounts, Transactions,
 
 ## Features
 
-- Add **Income** and **Expense** transactions (with **Payor**/**Payee**).
-- **Auto-create accounts** when a new account name is used.
-- View transactions for a given **month (YYYY-MM)** in a table.
-- One-click **Monthly Summary** (Income, Expense, Net).
-- **Export** a monthly report to Excel (Summary & ByCategory sheets).
-- **Import** transactions from an `.xlsx` file that matches the app schema.
-- Strict, predictable Excel schema (no legacy `party` / `_amount` columns).
+- Add **Income** and **Expense** transactions
+- **Auto-create accounts** when a new account name is used
+- View transactions for a given **month (YYYY-MM)** in a table
+- View **Monthly Summary** (Income, Expense, Net)
+- **Export** and **Import** Excel monthly reports
+- Saves data through Excel file located in **storage** folder
 
 ---
 
@@ -24,8 +23,4 @@ A small basic finance tracker built with a domain model (Accounts, Transactions,
   - `pandas`
   - `openpyxl` (read `.xlsx`)
   - `XlsxWriter` (write `.xlsx`)
-
-Install:
-
-```bash
-pip install PyQt5 pandas openpyxl XlsxWriter
+- Code: pip install PyQt5 pandas openpyxl XlsxWriter
