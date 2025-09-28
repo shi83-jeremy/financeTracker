@@ -1,13 +1,12 @@
-
 from storage.repository import LedgerRepository, CategorySummary, Report
 
 class ReportingService:
     def __init__(self, repo: LedgerRepository):
         self._repo = repo
 
-    def monthly_summary(self, month: str) -> Report:
+    def monthlySummary(self, month):
         ledger = self._repo.load()
-        txs = ledger.list_transactions(month=month)
+        txs = ledger.listTransactions(month=month)
         income = sum(t.effectiveAmount() for t in txs if t.effectiveAmount() > 0)
         expense = -sum(t.effectiveAmount() for t in txs if t.effectiveAmount() < 0)
         net = income - expense
@@ -24,5 +23,5 @@ class ReportingService:
 
         return Report(month, income, expense, net, list(by.values()))
 
-    def by_category(self, month: str):
-        return self.monthly_summary(month).by_category
+    def byCategory(self, month):
+        return self.monthlySummary(month).byCategory

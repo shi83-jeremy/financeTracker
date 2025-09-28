@@ -1,5 +1,3 @@
-# finance_tracker/interface/gui_qt.py
-# sys.path bootstrap (optional if you run as a module)
 import sys
 from pathlib import Path
 PKG_ROOT = Path(__file__).resolve().parents[1]
@@ -10,31 +8,28 @@ if str(PROJECT_ROOT) not in sys.path:
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QGridLayout, QLabel, QLineEdit, QComboBox,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog,
-    QMessageBox, QHBoxLayout, QVBoxLayout
+    QMessageBox, QHBoxLayout, QVBoxLayout, QSizePolicy
 )
-from PyQt5.QtCore import Qt
-import sys as _sys
+from PyQt5.QtCore import Qt, QTimer
 
 from src.core.transaction import Transaction
-from src.storage.repository import LedgerRepository
-from src.services.transactions import TransactionService, TxDTO
-from src.services.reporting import ReportingService
 
 class FinanceWindow(QWidget):
-    def __init__(self, repo: LedgerRepository, txsvc: TransactionService, rpsvc: ReportingService):
+    def __init__(self, repo, rpsvc):
         super().__init__()
         self.repo = repo
-        self.txsvc = txsvc
         self.rpsvc = rpsvc
-        self._build_ui()
+        self.buildUI()
 
-    def _build_ui(self):
+    def buildUI(self):
         self.setWindowTitle("Finance Tracker!!!!!!!!!!!!!!!!!!!!!")
         self.resize(1000, 560)
         root = QVBoxLayout(self)
 
+        # top grid for inputs
         grid = QGridLayout()
         r = 0
+
         self.date_edit = QLineEdit()
         self.account_edit = QLineEdit()
         self.type_combo = QComboBox(); self.type_combo.addItems(["EXPENSE", "INCOME"])
@@ -47,23 +42,42 @@ class FinanceWindow(QWidget):
         grid.addWidget(QLabel("Date (YYYY-MM-DD)"), r, 0); grid.addWidget(self.date_edit, r, 1)
         grid.addWidget(QLabel("Account"), r, 2); grid.addWidget(self.account_edit, r, 3)
         grid.addWidget(QLabel("Type"), r, 4); grid.addWidget(self.type_combo, r, 5); r += 1
-
         grid.addWidget(QLabel("Category"), r, 0); grid.addWidget(self.category_edit, r, 1)
         grid.addWidget(QLabel("Amount"), r, 2); grid.addWidget(self.amount_edit, r, 3)
-        grid.addWidget(QLabel("Party (Payee for Expense, Payor for Income)"), r, 4); grid.addWidget(self.party_edit, r, 5); r += 1
-
+        grid.addWidget(QLabel("Party"), r, 4); grid.addWidget(self.party_edit, r, 5); r += 1
         grid.addWidget(QLabel("Notes"), r, 0); grid.addWidget(self.notes_edit, r, 1, 1, 5); r += 1
 
-        row = QHBoxLayout()
+        # bottom row for actions
+        bottomRow = QHBoxLayout()
+
+        # add button and confirmation label for it (left side)
         self.add_btn = QPushButton("Add")
+        bottomRow.addWidget(self.add_btn)
+        self.inline_status = QLabel("")
+        self.inline_status.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self.inline_status.setStyleSheet("color:#000000; padding-left:8px;")
+        self.inline_status.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        bottomRow.addWidget(self.inline_status, 1)
+
+        # everything else (right side)
         self.import_btn = QPushButton("Import Excel")
-        row.addWidget(self.add_btn); row.addWidget(self.import_btn)
-        row.addSpacing(10)
-        row.addWidget(QLabel("Month (YYYY-MM)")); row.addWidget(self.month_edit)
+        self.month_label = QLabel("Month (YYYY-MM)")
+        self.month_edit.setFixedWidth(120)
         self.summary_btn = QPushButton("Show Summary")
         self.export_btn = QPushButton("Export Month")
-        row.addWidget(self.summary_btn); row.addWidget(self.export_btn); row.addStretch()
 
+        bottomRight = QHBoxLayout()
+        bottomRight.addWidget(self.import_btn)
+        bottomRight.addSpacing(12)
+        bottomRight.addWidget(self.month_label)
+        bottomRight.addWidget(self.month_edit)
+        bottomRight.addSpacing(12)
+        bottomRight.addWidget(self.summary_btn)
+        bottomRight.addWidget(self.export_btn)
+
+        bottomRow.addLayout(bottomRight)
+
+        # displaying transactions table
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(["Date", "Account", "Category", "Party", "Type", "Amount", "Notes"])
         header = self.table.horizontalHeader()
@@ -73,78 +87,100 @@ class FinanceWindow(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
 
+        #bottom confirmation label
         self.status_label = QLabel(""); self.status_label.setAlignment(Qt.AlignLeft)
         self.status_label.setStyleSheet("color: #444; padding: 4px;")
 
-        root.addLayout(grid); root.addLayout(row); root.addWidget(self.table); root.addWidget(self.status_label)
+        #add all onto root
+        root.addLayout(grid)
+        root.addLayout(bottomRow)
+        root.addWidget(self.table)
+        root.addWidget(self.status_label)
 
-        self.add_btn.clicked.connect(self._on_add)
-        self.import_btn.clicked.connect(self._on_import)
-        self.summary_btn.clicked.connect(self._on_summary)
-        self.export_btn.clicked.connect(self._on_export)
+        self.add_btn.clicked.connect(self.addTransaction)
+        self.import_btn.clicked.connect(self.importExcel)
+        self.summary_btn.clicked.connect(self.summarizeTable)
+        self.export_btn.clicked.connect(self.exportExcel)
 
-    # ---- Handlers ----
-    def _on_add(self):
+    # creates a transaction and adds it
+    def addTransaction(self):
         try:
-            dto = TxDTO(
-                date=self.date_edit.text().strip(),
-                account=self.account_edit.text().strip(),
-                category=self.category_edit.text().strip(),
-                amount=float(self.amount_edit.text()),
-                party=self.party_edit.text().strip(),
-                type=self.type_combo.currentText(),
-                notes=self.notes_edit.text().strip(),
-            )
-            tx_id = self.txsvc.add(dto)
-            self._set_status(f"Added transaction {tx_id[:8]}")
-            self._refresh_table_if_month()
+            if self.type_combo.currentText().upper() == "INCOME":
+                tx_id = Transaction.recordIncome(
+                    self.repo,
+                    date=self.date_edit.text().strip(),
+                    account=self.account_edit.text().strip(),
+                    category=self.category_edit.text().strip(),
+                    amount=float(self.amount_edit.text()),
+                    payor=(self.counterparty_edit.text().strip() if hasattr(self, "counterparty_edit")
+                        else self.party_edit.text().strip()),
+                    notes=self.notes_edit.text().strip(),
+                )
+            else:
+                tx_id = Transaction.recordExpense(
+                    self.repo,
+                    date=self.date_edit.text().strip(),
+                    account=self.account_edit.text().strip(),
+                    category=self.category_edit.text().strip(),
+                    amount=float(self.amount_edit.text()),
+                    payee=(self.counterparty_edit.text().strip() if hasattr(self, "counterparty_edit")
+                        else self.party_edit.text().strip()),
+                    notes=self.notes_edit.text().strip(),
+                )
+            self.displayConfirmation(f" Added transaction {tx_id[:8]}")
+            self.refreshTable()
         except Exception as e:
-            self._error(str(e))
+            self.error(str(e))
 
-    def _on_import(self):
+    # def importExcel(self):
+    #     pass
+    def importExcel(self):
         path, _ = QFileDialog.getOpenFileName(self, "Choose Excel file", filter="Excel (*.xlsx)")
         if not path: return
         try:
             ledger = self.repo.load()
-            n = self.repo.import_transactions(path, ledger)
+            n = self.repo.importTransactions(path, ledger)
             self.repo.save(ledger)
-            self._set_status(f"Imported {n} transactions.")
-            self._refresh_table_if_month()
+            self.displayConfirmation(f"Imported {n} transactions.")
+            self.refreshTable()
         except Exception as e:
-            self._error(str(e))
+            self.error(str(e))
 
-    def _on_summary(self):
+    #summary button for filling table in and showing summary of monthly expenses/incomes
+    def summarizeTable(self):
         month = self.month_edit.text().strip()
         if not month:
-            self._error("Enter month as YYYY-MM"); return
+            self.error("Enter month as YYYY-MM"); return
         try:
-            report = self.rpsvc.monthly_summary(month)
+            report = self.rpsvc.monthlySummary(month)
             ledger = self.repo.load()
-            txs = ledger.list_transactions(month=month)
-            self._fill_table(txs)
+            txs = ledger.listTransactions(month=month)
+            self.fillTable(txs)
             QMessageBox.information(
                 self, "Monthly Summary",
                 f"Month: {report.month}\nIncome: {report.income:.2f}\n"
                 f"Expense: {report.expense:.2f}\nNet: {report.net:.2f}"
             )
         except Exception as e:
-            self._error(str(e))
+            self.error(str(e))
 
-    def _on_export(self):
+    # def exportExcel(self):
+    #     pass
+    def exportExcel(self):
         month = self.month_edit.text().strip()
         if not month:
-            self._error("Enter month as YYYY-MM"); return
+            self.error("Enter month as YYYY-MM"); return
         try:
-            report = self.rpsvc.monthly_summary(month)
+            report = self.rpsvc.monthlySummary(month)
             path, _ = QFileDialog.getSaveFileName(self, "Save Report", f"{month}.xlsx", filter="Excel (*.xlsx)")
             if path:
-                self.repo.export_report(report, path)
-                self._set_status(f"Saved report to {path}")
+                self.repo.exportReport(report, path)
+                self.displayConfirmation(f"Saved report to {path}")
         except Exception as e:
-            self._error(str(e))
+            self.error(str(e))
 
-    # ---- Helpers ----
-    def _fill_table(self, txs: list[Transaction]):
+    #fill the table in based on transaction type
+    def fillTable(self, txs):
         self.table.setRowCount(0)
         for t in txs:
             ttype = "INCOME" if t.effectiveAmount() > 0 else "EXPENSE"
@@ -159,16 +195,24 @@ class FinanceWindow(QWidget):
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.table.setItem(row, col, item)
 
-    def _refresh_table_if_month(self):
+    def refreshTable(self):
         month = self.month_edit.text().strip()
         if not month: return
         ledger = self.repo.load()
-        txs = ledger.list_transactions(month=month)
-        self._fill_table(txs)
+        txs = ledger.listTransactions(month=month)
+        self.fillTable(txs)
 
-    def _set_status(self, msg: str): self.status_label.setText(msg)
-    def _error(self, msg: str): QMessageBox.critical(self, "Error", msg)
+    def displayConfirmation(self, msg: str):
+        #self.status_label.setText(msg) #for bottom confirmation line
 
-def run_gui(repo: LedgerRepository, txsvc: TransactionService, rpsvc: ReportingService):
+        self.inline_status.setText(msg)
+        QTimer.singleShot(4000, self.inline_status.clear)   #clears confirmation message after 4s
+
+    def error(self, msg): 
+        QMessageBox.critical(self, "Error", msg)
+
+def runGUI(repo, rpsvc):
     app = QApplication.instance() or QApplication(sys.argv)
-    win = FinanceWindow(repo, txsvc, rpsvc); win.show(); app.exec_()
+    win = FinanceWindow(repo, rpsvc)
+    win.show()
+    app.exec_()

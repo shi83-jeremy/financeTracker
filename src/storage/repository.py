@@ -7,9 +7,9 @@ class LedgerRepository(ABC):
     @abstractmethod
     def save(self, ledger: Ledger): ...
     @abstractmethod
-    def import_transactions(self, path: str, ledger: Ledger): ...
+    def importTransactions(self, path: str, ledger: Ledger): ...
     @abstractmethod
-    def export_report(self, report: "Report", path: str): ...
+    def exportReport(self, report: "Report", path: str): ...
 
 class CategorySummary:
     def __init__(self, category: str, total: float, count: int):
@@ -18,9 +18,9 @@ class CategorySummary:
         self.count = int(count)
 
 class Report:
-    def __init__(self, month, income, expense, net, by_category):
+    def __init__(self, month, income, expense, net, byCategory):
         self.month = month
         self.income = income
         self.expense = expense
         self.net = net
-        self.by_category = by_category
+        self.byCategory = byCategory
